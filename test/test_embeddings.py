@@ -2,6 +2,7 @@ import sys, os, time, traceback, inspect
 import unittest
 sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
+from test_data_download import download_and_extract_zip
 from crabDB import CrabDB, CrabSession, CrabThread, CrabBot, CrabMessage, CrabFileSegment
 import crabDB
 
@@ -72,7 +73,7 @@ class TestEmbeddings(unittest.TestCase):
         filename_list = [ 'hashire_merosu.txt' ]
         for filename in filename_list:
             print( f"Load {filename}")
-            file_path = f"testData/{filename}"
+            file_path = download_and_extract_zip(filename)
             before_id = client.get_file_id( file_path )
             if before_id is not None:
                 raise Exception("hate?")

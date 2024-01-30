@@ -5,6 +5,7 @@ sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
 import tiktoken
 from crabDB import isEmpty, ROOT_ID, CrabTask, CrabDB, CrabSession, CrabThread, CrabBot, CrabMessage, CrabFileSegment
+from test_data_download import download_and_extract_zip
 
 def main2():
     #create_emb( 'abc123' )
@@ -14,7 +15,7 @@ def main2():
     filename_list = filename_list[:1]
     for filename in filename_list:
         print( f"Load {filename}")
-        file_path = f"testData/{filename}"
+        file_path = download_and_extract_zip(filename)
         before_id = chroma_client.get_file_id( file_path )
         fileId = chroma_client.register_textfile( ROOT_ID, file_path, api_key=api_key )
         while True:

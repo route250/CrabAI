@@ -5,6 +5,7 @@ sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
 import tiktoken
 from crabDB import CrabTask, CrabDB, CrabSession, CrabThread, CrabBot, CrabMessage, CrabFileSegment
+from test_data_download import download_and_extract_zip
 
 def str_dump( value, max:int=100 ) ->str:
     dmp=str(value).replace('\n','\\n')
@@ -66,6 +67,7 @@ def tksplit(text: str, tokens: int = 1024) -> list[str]:
         s = e
 
     return result
+
 class TestA(unittest.TestCase):
 
     def xxtest_sample(self):
@@ -107,8 +109,9 @@ class TestA(unittest.TestCase):
         print(f"input_tokens:{input_tokens}")
 
     def test_retrive_message(self):
-        print("xxx")
-        file_path='testData/hashire_merosu.txt'
+        """メッセージからretriveするテスト"""
+        print("retrive_message")
+        file_path=download_and_extract_zip('hashire_merosu.txt')
         # login
         client:CrabDB = CrabDB( on_memory=True )
         Session:CrabSession = client.login( 'root' )

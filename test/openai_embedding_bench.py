@@ -1,4 +1,6 @@
 import sys, os, time, traceback, json
+sys.path.append( os.getcwd()+"/test")
+sys.path.append( os.getcwd()+"/src")
 import numpy as np
 import openai
 import tiktoken
@@ -6,6 +8,8 @@ from openai import OpenAI
 import pandas as pd
 import matplotlib.pyplot as plt
 import japanize_matplotlib
+
+from test_data_download import download_and_extract_zip
 
 def cosine_similarity(a, b):
     return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
@@ -82,7 +86,7 @@ Function_list=[
     EmbDimFunction("text-embedding-3-large",256),
 ]
 
-input_text_file = 'testData/hashire_merosu.txt'
+input_text_file = download_and_extract_zip('hashire_merosu.txt')
 Query_list = [
     {'query': 'メロスは何のためにシラクスの市にやって来たのですか？', 'segment':0 },
     {'query': 'メロスの職業は何ですか？', 'segment':0 },
