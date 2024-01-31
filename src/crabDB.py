@@ -20,6 +20,7 @@ import tiktoken
 
 import chromadb
 from chromadb.config import Settings
+from pyutils import calculate_md5, to_md5, detect_encode
 
 DEFAULT_CRAB_PATH='~/.data/crabAI'
 ROOT_USERNAME:str='root'
@@ -46,26 +47,6 @@ DEFAULT_PROMPT:str = """あなたは蟹AIです。普通に会話しながら、
 ショートトークに対しては短い返答を返します🦀カニ。議論や詳細な説明では長文も話します。
 人間に用事や話題をを尋ねることは禁止、「なにか用？」の代わりに🦀蟹の日常や生態の話をしたり、食べ放題に反対します🦀カニ。
 """
-
-def calculate_md5(file_path):
-    hash_md5 = hashlib.md5()
-    with open(file_path, "rb") as f:
-        for chunk in iter(lambda: f.read(4096), b""):
-            hash_md5.update(chunk)
-    return hash_md5.hexdigest()
-
-def detect_encode( filename ):
-    encs=['utf-8','cp932','utf-16']
-    for enc in encs:
-        try:
-            with open(filename,'r',encoding=enc) as inp:
-                chunk = inp.read(CHUNK_CHARS)
-                return enc
-        except UnicodeDecodeError:
-            continue
-        except:
-            pass
-    return None
 
 tkenc = tiktoken.encoding_for_model('gpt-3.5-turbo')
 
@@ -298,9 +279,9 @@ class CrabUser(CrabType):
         self.enable:bool = decodeBool(enable,True)
         self.name:str = emptyToBlank( name, '' )
         self.description:str = emptyToBlank( description, '' )
-        self.passwd:str = emptyToBlank( passwd, '' )
+        self.passwd:str = emptyToBlank( passwd, '' )[:18]
         self.email:str = emptyToBlank( email, '' )
-        self.openai_api_key:str = decode_openai_api_key( openai_api_key )
+        self.openai_api_key:str = decode_openai_api_key( openai_api_key )[:18]
         self.share_key:bool = decodeBool( share_key, not ( self.xId==ROOT_ID or self.name==ROOT_USERNAME ) )
 
     def to_meta(self):
@@ -769,17 +750,29 @@ class CrabDB:
         try:
             if not isinstance(value,str):
                 raise Exception('invalid value type')
-            f:Fernet = Fernet(self._get_secret_key())
+            f:Fernet = Fernet( base64.b64encode(self._get_secret_key()) )
             enc:str = base64.b64encode( f.encrypt( value.encode() ) ).decode()
             return memo + '🦀' + enc
         except:
             pass
         raise Exception('invalid value')
 
+    def _crypt_passwd( self, passwd:str ) ->str:
+        if not isEmpty( passwd ) and passwd.find('🦀')<0:
+            return self._crypt( to_md5(passwd), 'pw' )
+        else:
+            return ''
+
+    def _crypt_apikey( self, apikey:str ) ->str:
+        if not isEmpty(decode_openai_api_key(apikey)) and apikey.find('🦀')<0:
+            return self._crypt( apikey, apikey[:5]+'***'+apikey[-2:])
+        else:
+            return ''
+
     def _decrypt(self, enc ):
         try:
             memo,txt = enc.split('🦀')
-            f:Fernet = Fernet(self._get_secret_key())
+            f:Fernet = Fernet( base64.b64encode(self._get_secret_key()) )
             value = f.decrypt( base64.b64decode( txt ) ).decode()
             return value
         except:
@@ -982,6 +975,12 @@ class CrabDB:
             k=decode_openai_api_key( os.environ.get('OPENAI_API_KEY') )
         return k
 
+    @staticmethod
+    def _eqpw( a:str, b:str, w=18 ) ->bool:
+        aa = '' if isEmpty(a) else a[:w]
+        bb = '' if isEmpty(b) else b[:w]
+        return aa == bb
+
     def upsert_user(self, userId:int, uu ) -> CrabUser:
         if not checkId(userId):
             raise Exception( f"invalid userid" )
@@ -997,8 +996,6 @@ class CrabDB:
         if userId != ROOT_ID:
             if not is_update or userId != user.xId:
                 raise Exception( f"invalid userid" )
-        # password
-        if 
         with self._lock:
             collection:chromadb.Collection = self.get_collection(collection_name='users',create_new=True)
             # 名前チェックの条件
@@ -1014,21 +1011,27 @@ class CrabDB:
                 res:chromadb.GetResult = collection.get( ids=[user.to_key()] )
                 if len(res.get('ids',[]))!=1:
                     raise Exception( f"invalid userId {user.xId}")
-            elif user.name == ROOT_USERNAME:
-                user.xId = ROOT_ID
-            else:
-                user.xId = self.get_next_id()
-            # passwd
-            is_update_pw = True
-            if is_update:
-                if user.passwd[:12] == res.get('passwd','')[:12]:
-                    user.passwd = res.get('passwd')
+                # passwd
+                meta = res.get('metadatas')[0]
+                orig_pw = meta.get('passwd')
+                if CrabDB._eqpw( user.passwd, meta.get('passwd') ):
+                    user.passwd = orig_pw
                 else:
-                    user.passwd = self._crypt( calculate_md5(user.passwd), 'pw' )
+                    user.passwd = self._crypt_passwd( user.passwd )
+                # api_key
+                orig_apikey = meta.get('openai_api_key')
+                if CrabDB._eqpw( user.openai_api_key, orig_apikey):
+                    user.openai_api_key = orig_apikey
+                else:
+                    user.openai_api_key = self._crypt_apikey( user.openai_api_key )
             else:
-                is_update_pw = True
-            if not isEmpty(user.passwd):
-                user.passwd = self._crypt(calculate_md5(user.passwd),'pw')
+                if user.name == ROOT_USERNAME:
+                    user.xId = ROOT_ID
+                else:
+                    user.xId = self.get_next_id()
+                # passwd
+                user.passwd = self._crypt_passwd( user.passwd )
+                user.openai_api_key = self._crypt_apikey( user.openai_api_key )
             collection.upsert( ids=[user.to_key()], metadatas=[user.to_meta()], embeddings=[EmptyEmbedding] )
         return user
 
@@ -1050,13 +1053,7 @@ class CrabDB:
                     return user.name
         return None
 
-    def _pwhash(self,passwd) ->str:
-        pass
-    def _pwdecode(self,passwd) ->str:
-        pass
-    def _pwencode(self,passwd) ->str:
-        pass
-    def login(self, username, passwd ):
+    def login(self, username, passwd='' ):
         user:CrabUser = self.get_user( username )
         if user is not None and user.name == username:
             hash = ''
@@ -1070,7 +1067,7 @@ class CrabDB:
                 if not isEmpty(passwd):
                     return None
             else:
-                if hash != calculate_md5(passwd):
+                if hash != to_md5(passwd):
                     return None
             return CrabSession( db=self, user=user )
         return None
