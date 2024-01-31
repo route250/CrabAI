@@ -15,6 +15,8 @@ OpenAIのAPIを使ったチャットボットシステムです。
 |chromadb||0.4.22|依存性がよくわからないので要求バージョン不明|
 |pysqlite3-binary||0.5.2.post3|sqlite3を使う場合は不要|
 |sqlite3|>=3.35.0||pysqlite3-binaryを使う場合は不要|
+|cryptography||42.0.2|依存性がよくわからないので要求バージョン不明|
+
 
 ## 🦀実行方法
 
@@ -34,7 +36,7 @@ streamlit標準の8501ポートで起動しますので、ブラウザで、http
 python3 -m venv .venv --prompt CrabAI
 source .venv/bin/activate
 python3 -m pip install -U pip
-pip install streamlit openai tiktoken chromadb
+pip install streamlit openai tiktoken chromadb cryptography
 ```
 
 おそらく、pysqlite3-binaryも必要になります。

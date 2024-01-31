@@ -1,7 +1,8 @@
 import os,sys,io,traceback, time, datetime, json, copy, uuid
 from bisect import bisect_right
 from threading import Thread, RLock, Condition
-import hashlib
+import hashlib, base64
+from cryptography.fernet import Fernet
 import httpx
 import openai
 from openai import OpenAI
@@ -756,6 +757,36 @@ class CrabDB:
             traceback.print_exc()
             pass
 
+    def _get_secret_key(self) ->bytes:
+        metadatas:list = self.get_metadatas( 'config', ids=['0'] )
+        orig_meta = metadatas[0] if metadatas and len(metadatas)>0 else {}
+        k = orig_meta.get('secretKey')
+        if isEmpty(k):
+            k = str(uuid.uuid4()).replace('-','')
+        return k.encode()
+
+    def _crypt(self, value, memo:str='' ):
+        try:
+            if not isinstance(value,str):
+                raise Exception('invalid value type')
+            f:Fernet = Fernet(self._get_secret_key())
+            enc:str = base64.b64encode( f.encrypt( value.encode() ) ).decode()
+            return memo + '🦀' + enc
+        except:
+            pass
+        raise Exception('invalid value')
+
+    def _decrypt(self, enc ):
+        try:
+            memo,txt = enc.split('🦀')
+            f:Fernet = Fernet(self._get_secret_key())
+            value = f.decrypt( base64.b64decode( txt ) ).decode()
+            return value
+        except:
+            pass
+        raise Exception('invalid value')
+
+
     def create_embeddings(self, input:str, *, model=None, dimensions:int=None, api_key=None ) -> list[float]:
         try:
             check_openai_api_key( api_key )
@@ -966,6 +997,8 @@ class CrabDB:
         if userId != ROOT_ID:
             if not is_update or userId != user.xId:
                 raise Exception( f"invalid userid" )
+        # password
+        if 
         with self._lock:
             collection:chromadb.Collection = self.get_collection(collection_name='users',create_new=True)
             # 名前チェックの条件
@@ -985,6 +1018,17 @@ class CrabDB:
                 user.xId = ROOT_ID
             else:
                 user.xId = self.get_next_id()
+            # passwd
+            is_update_pw = True
+            if is_update:
+                if user.passwd[:12] == res.get('passwd','')[:12]:
+                    user.passwd = res.get('passwd')
+                else:
+                    user.passwd = self._crypt( calculate_md5(user.passwd), 'pw' )
+            else:
+                is_update_pw = True
+            if not isEmpty(user.passwd):
+                user.passwd = self._crypt(calculate_md5(user.passwd),'pw')
             collection.upsert( ids=[user.to_key()], metadatas=[user.to_meta()], embeddings=[EmptyEmbedding] )
         return user
 
@@ -1006,9 +1050,28 @@ class CrabDB:
                     return user.name
         return None
 
-    def login(self, username ):
-        user = self.get_user( username )
+    def _pwhash(self,passwd) ->str:
+        pass
+    def _pwdecode(self,passwd) ->str:
+        pass
+    def _pwencode(self,passwd) ->str:
+        pass
+    def login(self, username, passwd ):
+        user:CrabUser = self.get_user( username )
         if user is not None and user.name == username:
+            hash = ''
+            try:
+                if not isEmpty(user.passwd):
+                    hash = self._decrypt(user.passwd)
+            except:
+                if user.xId != ROOT_ID:
+                    return None
+            if isEmpty(hash):
+                if not isEmpty(passwd):
+                    return None
+            else:
+                if hash != calculate_md5(passwd):
+                    return None
             return CrabSession( db=self, user=user )
         return None
 

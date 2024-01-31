@@ -57,7 +57,7 @@ fi
 python3 -m pip install -U pip
 P=$(pip list | awk '$1=="openai"||$1=="streamlit"||$1=="chromadb"||$1=="tiktoken" {print $1}'|wc -l)
 if [ "$P" != "4" ]; then
-  pip install streamlit openai tiktoken chromadb pysqlite3-binary
+  pip install streamlit openai tiktoken chromadb pysqlite3-binary cryptography
 fi
 P=$(pip list | awk '$1=="openai"||$1=="streamlit"||$1=="chromadb"||$1=="tiktoken" {print $1}'|wc -l)
 if [ "$P" != "4" ]; then
