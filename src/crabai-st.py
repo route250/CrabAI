@@ -304,16 +304,17 @@ def main():
         # チャット画面
         is_not_owner = UserId != current_thread.owner
 
-        st.subheader( current_thread.get_bot_name() )
-        desc=current_thread.get_bot_description()
-        if not isEmpty(desc):
-            st.write( desc )
-        st.divider()
-
         # これまでのチャット履歴を全て表示する 
-        for message in current_thread.get_messages(30):
+        show_messages = current_thread.get_messages(30)
+        for message in show_messages:
             with st.chat_message(message.role):
                 st.markdown(message.content)
+        with st.chat_message('🦀'):
+            st.write(current_thread.get_bot_name())
+            if len(show_messages)==0:
+                desc=current_thread.get_bot_description()
+                if not isEmpty(desc):
+                    st.write( desc )
 
         # 持ち主じゃなければ見るだけ
         if not is_not_owner:
