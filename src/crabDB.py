@@ -1074,8 +1074,8 @@ class CrabDB:
                     raise Exception( f"invalid userId {user.xId}")
                 # passwd
                 meta = res.get('metadatas')[0]
-                orig_pw = meta.get('passwd')
-                if CrabDB._eqpw( user.passwd, meta.get('passwd') ):
+                orig_pw = meta.get('passwd') or ''
+                if CrabDB._eqpw( user.passwd, orig_pw ):
                     user.passwd = orig_pw
                 else:
                     user.passwd = self._crypt_passwd( user.passwd )
