@@ -961,7 +961,7 @@ class CrabDB:
         if not issubclass(Type,CrabContentType):
             with self._lock:
                 ccollection:chromadb.Collection = self.get_collection( collection_name=name,create_new=True )
-                ccollection.update( ids=x_ids, documents=x_contents, embeddings=x_embs, metadatas=x_metas )
+                ccollection.update( ids=x_ids, metadatas=x_metas )
         else:
             x_contents:list[str] = [ m.content for m in datas]
             x_embs:list[list] = self.create_embeddings( x_contents, model=model, api_key=api_key )
@@ -1270,6 +1270,9 @@ class CrabDB:
         for threId in ids:
             if not checkId(threId):
                 continue
+            #
+            thre:CrabThread = self.get_data( 'threads', CrabThread, id=to_key(threId))
+            update_title:bool = not thre.title or thre.title.find( f"#{thre.xId}" )>0
             # 最後のインデックスを取得
             #print(f"[task_create_index_message] thread:{threId}")
             w = { 'threadId': threId }
@@ -1310,6 +1313,32 @@ class CrabDB:
                     mesg_seg_list=[]
                     xx_ids = [index.xId for index in x_index_list]
                     self.task_submit( self._task_embedding_index_message, userId, xx_ids, api_key=api_key )
+                    update_title = True
+            if update_title:
+                # ---------------------------------------------------
+                # タイトル設定
+                # ---------------------------------------------------
+                # 直近のメッセージ
+                try:
+                    w = { 'threadId': threId }
+                    mesglist:list[CrabMessage] = self.get_datas( 'messages', CrabMessage, where=w, offset=-4 )
+                    # プロンプト
+                    contents:str = "\n\n".join( [ f"{m.role}: {m.content}" for m in mesglist if not isEmpty(m.content) ] )
+                    prompt = f"# Create a thread title from the following conversation.\n\n{contents}\n\n# Output only the title. No other explanations or conversations are required."
+                    # LLM
+                    client:OpenAI = OpenAI( api_key=api_key )
+                    res: ChatCompletion = client.chat.completions.create(
+                        messages=[ { 'role': CrabMessage.SYSTEM, 'content': prompt } ],
+                        model='gpt-3.5-turbo', max_tokens=100
+                    )
+                    # result
+                    new_title = res.choices[0].message.content
+                    if not isEmpty(new_title):
+                        # update title
+                        thre.title = new_title
+                        self.upsert_datas( 'threads', [thre] )
+                except:
+                    pass
 
     def _task_embedding_index_message(self, userId:int, ids:list[int], *, api_key:str=None, task:CrabTask=None ):
         check_openai_api_key( api_key )
@@ -1700,6 +1729,9 @@ class CrabThread(CrabType):
             self.createTime = time.time()
         #
         self.bot:CrabBot = None
+
+    def to_meta(self):
+        return self.encode()
 
     def encode(self):
         return {
