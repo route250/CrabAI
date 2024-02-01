@@ -1806,162 +1806,124 @@ class CrabThread(CrabType):
         return tokens
 
     def run(self, message:str=None, *, verbose=True ):
-        bot = self.load_bot()
-        if bot is None:
-            yield "ERROR:Can not load bot."
-            return
-               
-        if not isEmpty(message):
-            # ユーザの入力をチャット履歴に追加する
-            self.add_user_message( message )
-        
-        openai_model:OpenAIModel = CrabBot.get_model(bot.model)
-
-        # 入力トークン数のカウントと調整
-        max_input_tokens:int = int( min(bot.input_tokens,openai_model.input_tokens)*0.95 )
-        input_tokens:int = 2
-        # プロンプト
-        request_prompt:str = None
-        if bot.llm:
-            request_prompt = bot.prompt
-            request_prompt = request_prompt.replace('${datetime}', current_date_time() )
-            input_tokens += 4 + CrabMessage._SYSTEM_TOKENS + count_tokens( request_prompt )
-        xrag = ( bot.rag and len(bot.files)>0 )
-        # 最近の会話履歴
-        tail_messages = []
-        query_embedding:list[float] = None
-        if bot.llm:
-            # llmを使う場合
-            if verbose:
-                yield CrabBot.CLS
-                yield "get last messages..."
-            tail_messages, query_embedding = self._session._get_tail_messages(self.xId, 10)
-            excludeId= tail_messages[0].xId if len(tail_messages)>0 else 0
-        elif bot.retrive or xrag:
-            # llmを使わないが検索だけする場合
-            chunk_count = 1
-            if verbose:
-                yield CrabBot.CLS
-                yield "get embedding..."
-            mesgs, query_embedding = self._session._get_tail_messages( self.xId, chunk_count )
-            excludeId= mesgs[0].xId if len(mesgs)>0 else 0
-        # 過去の会話履歴を検索する
-        hist_messges:list = None
-        if bot.retrive:
-            max_distance = 0.3
-            if verbose:
-                yield CrabBot.CLS
-                yield "retrive messages..."
-            hist_messges:list = self._session._retrive_message( botId=self.botId, emb=query_embedding, excludeId=excludeId, max_distance=max_distance )
-        # ファイルから検索する
-        segs:list = None
-        if xrag:
-            max_distance = 0.3
-            if verbose:
-                yield CrabBot.CLS
-                yield "retrive files"
-            segs:list = self._session._retrive_file( fileIds=bot.files, emb=query_embedding, max_distance=max_distance )
-        # 入力トークン調整:リストを結合
-        retrive_tokens = CrabThread._trim_retrive_messages( (hist_messges,segs), (max_input_tokens-input_tokens)//2)
-        input_tokens += retrive_tokens
-        # 入力トークン調整:制限を超えるメッセージにマーキング
-        last_tokens = CrabMessage.trim_messages( tail_messages, (max_input_tokens-input_tokens) )
-        input_tokens += last_tokens
-                
-        # 出力トークン数制限
-        output_tokens:int = min( openai_model.output_tokens, bot.max_tokens - input_tokens )
-
-        # 入力を構築する
-        request_messages:list = []
-        if bot.llm:
-            request_messages += [ { 'role': CrabMessage.SYSTEM, 'content': bot.prompt } ]
-        request_messages += [ m.to_obj() for m in asArray(hist_messges) ]
-        request_messages += [ m.to_obj() for m in asArray(segs) ]
-        request_messages += [ m.to_obj() for m in asArray(tail_messages) ]
-
-        # 実行
-        predata = []
-        stream = None
-        if bot.llm:
-            if verbose:
-                yield CrabBot.CLS
-                yield "execute LLM..."
-            try:
-                client:OpenAI = OpenAI( api_key=self._session._get_openai_api_key())
-                stream = client.chat.completions.create(
-                    messages=request_messages,
-                    model=openai_model.model, max_tokens=output_tokens, temperature=bot.temperature,
-                    stream=True
-                )
-                yield CrabBot.CLS
-                buffer = ""
-                for part in stream:
-                    seg = part.choices[0].delta.content or ""
-                    buffer += seg
-                    yield seg
-                # ChatBotの返答をチャット履歴に追加する
-                if not isEmpty(buffer):
-                    self.add_assistant_message( buffer )
-                    # reindex
-                    self.create_index_message()
-            except openai.OpenAIError as ex:
-                yield f"{ex}"
-            except Exception as ex:
-                yield f"{ex}"
-        else:
-            yield CrabBot.CLS
-            if hist_messges is not None:
-                yield "### result of History\n"
-                for m in hist_messges:
-                    yield "#### "+m.to_dump()+"\n"+m.to_content()+"\n"
-            if segs is not None:
-                yield "### result of RAG\n"
-                for m in segs:
-                    yield "#### "+m.to_dump()+"\n"+m.to_content()+"\n"
-
-        #wrapper = ChatStreamWrapper(self,predata,stream)
-        #return wrapper
-        #openai.BadRequestError: Error code: 400 - {'error': {'message': "This model's maximum context length is 4097 tokens. However, you requested 5390 tokens (1294 in the messages, 4096 in the completion). Please reduce the length of the messages or completion.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
-
-class ChatStreamWrapper:
-
-    def __init__(self, thre:CrabThread, predata, stream:Stream[ChatCompletionChunk]):
-        self.thread = thre
-        if predata is None:
-            self.predata = []
-        elif isinstance(predata,list):
-            self.predata = predata
-        else:
-            self.predata = [predata]
-        self.stream:Stream[ChatCompletionChunk] = stream
-        self.buffer = ''
-
-    def __iter__(self):
-        return self
-
-    def __next__(self):
         try:
-            if len(self.predata)>0:
-                seg = self.predata[0]
-                del self.predata[0]
-                return seg
-            elif self.stream is None:
-                raise StopIteration()
+            bot = self.load_bot()
+            if bot is None:
+                yield "ERROR:Can not load bot."
+                return
+                
+            if not isEmpty(message):
+                # ユーザの入力をチャット履歴に追加する
+                self.add_user_message( message )
             
-            part:ChatCompletionChunk = next(self.stream)
-            # log = json.dumps( part, indent=2, ensure_ascii=False )
-            # print(log)
-            seg = part.choices[0].delta.content or ""
-            self.buffer += seg
-            return seg
-        except StopIteration:
-            try:
-                # ChatBotの返答をチャット履歴に追加する
-                if self.stream is not None and not isEmpty(self.buffer):
-                    self.thread.add_assistant_message( self.buffer )
-            except:
-                traceback.print_exc()
-            raise StopIteration
+            openai_model:OpenAIModel = CrabBot.get_model(bot.model)
+
+            # 入力トークン数のカウントと調整
+            max_input_tokens:int = int( min(bot.input_tokens,openai_model.input_tokens)*0.95 )
+            input_tokens:int = 2
+            # プロンプト
+            request_prompt:str = None
+            if bot.llm:
+                request_prompt = bot.prompt
+                request_prompt = request_prompt.replace('${datetime}', current_date_time() )
+                input_tokens += 4 + CrabMessage._SYSTEM_TOKENS + count_tokens( request_prompt )
+            xrag = ( bot.rag and len(bot.files)>0 )
+            # 最近の会話履歴
+            tail_messages = []
+            query_embedding:list[float] = None
+            if bot.llm:
+                # llmを使う場合
+                if verbose:
+                    yield CrabBot.CLS
+                    yield "get last messages..."
+                tail_messages, query_embedding = self._session._get_tail_messages(self.xId, 10)
+                excludeId= tail_messages[0].xId if len(tail_messages)>0 else 0
+            elif bot.retrive or xrag:
+                # llmを使わないが検索だけする場合
+                chunk_count = 1
+                if verbose:
+                    yield CrabBot.CLS
+                    yield "get embedding..."
+                mesgs, query_embedding = self._session._get_tail_messages( self.xId, chunk_count )
+                excludeId= mesgs[0].xId if len(mesgs)>0 else 0
+            # 過去の会話履歴を検索する
+            hist_messges:list = None
+            if bot.retrive:
+                max_distance = 0.3
+                if verbose:
+                    yield CrabBot.CLS
+                    yield "retrive messages..."
+                hist_messges:list = self._session._retrive_message( botId=self.botId, emb=query_embedding, excludeId=excludeId, max_distance=max_distance )
+            # ファイルから検索する
+            segs:list = None
+            if xrag:
+                max_distance = 0.3
+                if verbose:
+                    yield CrabBot.CLS
+                    yield "retrive files"
+                segs:list = self._session._retrive_file( fileIds=bot.files, emb=query_embedding, max_distance=max_distance )
+            # 入力トークン調整:リストを結合
+            retrive_tokens = CrabThread._trim_retrive_messages( (hist_messges,segs), (max_input_tokens-input_tokens)//2)
+            input_tokens += retrive_tokens
+            # 入力トークン調整:制限を超えるメッセージにマーキング
+            last_tokens = CrabMessage.trim_messages( tail_messages, (max_input_tokens-input_tokens) )
+            input_tokens += last_tokens
+                    
+            # 出力トークン数制限
+            output_tokens:int = min( openai_model.output_tokens, bot.max_tokens - input_tokens )
+
+            # 入力を構築する
+            request_messages:list = []
+            if bot.llm:
+                request_messages += [ { 'role': CrabMessage.SYSTEM, 'content': bot.prompt } ]
+            request_messages += [ m.to_obj() for m in asArray(hist_messges) ]
+            request_messages += [ m.to_obj() for m in asArray(segs) ]
+            request_messages += [ m.to_obj() for m in asArray(tail_messages) ]
+
+            # 実行
+            predata = []
+            stream = None
+            if bot.llm:
+                if verbose:
+                    yield CrabBot.CLS
+                    yield "execute LLM..."
+                try:
+                    client:OpenAI = OpenAI( api_key=self._session._get_openai_api_key())
+                    stream = client.chat.completions.create(
+                        messages=request_messages,
+                        model=openai_model.model, max_tokens=output_tokens, temperature=bot.temperature,
+                        stream=True
+                    )
+                    yield CrabBot.CLS
+                    buffer = ""
+                    for part in stream:
+                        seg = part.choices[0].delta.content or ""
+                        buffer += seg
+                        yield seg
+                    # ChatBotの返答をチャット履歴に追加する
+                    if not isEmpty(buffer):
+                        self.add_assistant_message( buffer )
+                        # reindex
+                        self.create_index_message()
+                except openai.OpenAIError as ex:
+                    yield f"{ex}"
+                except Exception as ex:
+                    yield f"{ex}"
+            else:
+                yield CrabBot.CLS
+                if hist_messges is not None:
+                    yield "### result of History\n"
+                    for m in hist_messges:
+                        yield "#### "+m.to_dump()+"\n"+m.to_content()+"\n"
+                if segs is not None:
+                    yield "### result of RAG\n"
+                    for m in segs:
+                        yield "#### "+m.to_dump()+"\n"+m.to_content()+"\n"
+        except openai.AuthenticationError as ex:
+            yield f"{type(ex).__name__}: {ex.message}"
+        except openai.OpenAIError as ex:
+            yield f"{type(ex).__name__}: {ex.message}"
+        #openai.BadRequestError: Error code: 400 - {'error': {'message': "This model's maximum context length is 4097 tokens. However, you requested 5390 tokens (1294 in the messages, 4096 in the completion). Please reduce the length of the messages or completion.", 'type': 'invalid_request_error', 'param': 'messages', 'code': 'context_length_exceeded'}}
 
 class CrabSession:
 

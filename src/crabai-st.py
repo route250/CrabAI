@@ -50,7 +50,7 @@ def main():
         DB:CrabDB = get_database()
         userlist:list[str] = DB.get_usernames()
         username = st.selectbox( 'Select User:', userlist, placeholder='select username', key='username', index=None )
-        passwd = st.text_input( 'password', type='password', placeholder='your password ')
+        passwd = st.text_input( 'password', type='password', placeholder='your password', )
         st.button( label='Login', key='submit', on_click=handle_login, args=(username,passwd,) )
         return
 
@@ -297,7 +297,7 @@ def main():
         st.text_input( label='Name', key='user_name', value=edit_target.name )
         st.text_input( label='Passwd', key='user_passwd', type='password', value=edit_target.passwd )
         st.text_input( label='E-mail', key='user_email', value=edit_target.email )
-        st.text_input( label='OpenAI api-key', key='user_openai_api_key', type='password', value=edit_target.openai_api_key )
+        st.text_input( label='OpenAI api-key', key='user_openai_api_key', value=edit_target.openai_api_key )
         st.checkbox( label='Share key', key='user_share_key', value=edit_target.share_key, disabled=not SESSION.is_root(UserName) )
         st.text_area( label='Description', key='user_description', value=edit_target.description, height=120 )
 
