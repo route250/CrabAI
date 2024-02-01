@@ -25,9 +25,9 @@ def handle_bot_close():
     st.session_state['edit']=None
     st.session_state['errormsg']=None
 
-def handle_login( username ):
+def handle_login( username, passwd ):
     DB:CrabDB = get_database()
-    s = DB.login( username )
+    s = DB.login( username, passwd )
     if isinstance(s,CrabSession):
         st.session_state['session'] = s
         handle_bot_close()
@@ -50,7 +50,8 @@ def main():
         DB:CrabDB = get_database()
         userlist:list[str] = DB.get_usernames()
         username = st.selectbox( 'Select User:', userlist, placeholder='select username', key='username', index=None )
-        st.button( label='Login', key='submit', on_click=handle_login, args=(username,) )
+        passwd = st.text_input( 'password', type='password', placeholder='your password ')
+        st.button( label='Login', key='submit', on_click=handle_login, args=(username,passwd,) )
         return
 
     # ログイン済み

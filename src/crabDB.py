@@ -281,7 +281,7 @@ class CrabUser(CrabType):
         self.description:str = emptyToBlank( description, '' )
         self.passwd:str = emptyToBlank( passwd, '' )[:18]
         self.email:str = emptyToBlank( email, '' )
-        self.openai_api_key:str = decode_openai_api_key( openai_api_key )[:18]
+        self.openai_api_key:str = CrabDB._before_crab(openai_api_key)
         self.share_key:bool = decodeBool( share_key, not ( self.xId==ROOT_ID or self.name==ROOT_USERNAME ) )
 
     def to_meta(self):
@@ -765,9 +765,14 @@ class CrabDB:
 
     def _crypt_apikey( self, apikey:str ) ->str:
         if not isEmpty(decode_openai_api_key(apikey)) and apikey.find('🦀')<0:
-            return self._crypt( apikey, apikey[:5]+'***'+apikey[-2:])
+            return self._crypt( apikey, apikey[:6]+'***'+apikey[-3:])
         else:
             return ''
+
+    @staticmethod
+    def _before_crab( value ) -> str:
+        p = value.find('🦀') if value else -1
+        return value[:p] if p>0 else ''
 
     def _decrypt(self, enc ):
         try:
@@ -872,6 +877,12 @@ class CrabDB:
                 res:chromadb.GetResult = collection.get( ids=to_keys(ids), where=where, include=inc, limit=limit, offset=offset )
         return merge_metadatas(res)
 
+    def get_metadata(self,name, id, with_content=False ) -> list:
+        metadatas:list = self.get_metadatas(name, ids=[id], with_content=with_content )
+        if isinstance(metadatas,list) and len(metadatas)==1:
+            return metadatas[0]
+        return None
+
     def get_datas( self, name, Type, *, ids=None, where=None, limit:int=None, offset:int=None ):
         if not isinstance(Type,type) or not issubclass( Type, CrabType ):
             raise Exception('class is invalid or not present.')
@@ -884,6 +895,12 @@ class CrabDB:
             w = where
         datas:list = [ Type(**meta) for meta in self.get_metadatas(name,ids=ids,where=w,with_content=with_content,limit=limit,offset=offset) ]
         return datas
+
+    def get_data( self, name, Type, id ):
+        datas:list = self.get_datas( name, Type, ids=[id] )
+        if isinstance(datas,list) and len(datas)==1:
+            return datas[0]
+        return None
 
     def query_metadatas(self,name, *, embeddings=None,texts=None, where=None, with_content=False, n_results:int=None, max_distance:float=0.3, api_key=None ) -> list:
         if isEmpty(name):
@@ -965,15 +982,59 @@ class CrabDB:
                     return user
         return None
 
+    def login(self, username, passwd='' ):
+        if isEmpty(username):
+            return None
+        metadatas:list = self.get_metadatas( 'users', where={ 'name': username } )
+        if not isinstance(metadatas,list) or len(metadatas)!=1 and metadatas[0].get('name')!=username:
+            return None
+        user:CrabUser = CrabUser( **metadatas[0] )
+        user_passwd = metadatas[0].get('passwd','')
+        hash = ''
+        try:
+            if not isEmpty(user_passwd):
+                hash = self._decrypt(user_passwd)
+        except:
+            if user.xId != ROOT_ID:
+                return None
+        if isEmpty(hash):
+            if not isEmpty(passwd):
+                return None
+        else:
+            if hash != to_md5(passwd):
+                return None
+        return CrabSession( db=self, user=user )
+
     def get_public_openai_key(self) -> str:
-        k=''
-        users:list[CrabUser] = self.get_datas( 'users', CrabUser, ids=[ROOT_ID] )
-        if users and len(users)>0:
-            u=users[0]
-            k = decode_openai_api_key( u.openai_api_key ) if u.share_key else ''
-        if isEmpty(k):
-            k=decode_openai_api_key( os.environ.get('OPENAI_API_KEY') )
-        return k
+        return self.get_openai_key( ROOT_ID )
+
+    def get_openai_key(self, userId:int ) ->str:
+        # ユーザを検索
+        user_meta = self.get_metadata( 'users', id=to_key(userId) )
+        if not user_meta:
+            return ''
+        key = ''
+        enc = user_meta.get('openai_api_key')
+        if not isEmpty(enc):
+            text = self._decrypt(enc)
+            key = decode_openai_api_key( text )
+        if not isEmpty(key):
+            return key
+        # root以外なら、rootのキー使用許可があるか？
+        use_public = userId != ROOT_ID and decodeBool( user_meta.get('share_key'), False )
+        if use_public:
+            # rootユーザを検索
+            root_meta = self.get_metadata( 'users', id=to_key(ROOT_ID) )
+            root_share = decodeBool( root_meta.get('share_key'), False )
+            enc = root_meta.get('openai_api_key')
+            # rootがキーを公開しているか？
+            if root_share and not isEmpty(enc):
+                text = self._decrypt(enc)
+                key = decode_openai_api_key( text )
+        # キーがなければ環境変数
+        if isEmpty(key):
+            key=decode_openai_api_key( os.environ.get('OPENAI_API_KEY') )
+        return key
 
     @staticmethod
     def _eqpw( a:str, b:str, w=18 ) ->bool:
@@ -1020,7 +1081,7 @@ class CrabDB:
                     user.passwd = self._crypt_passwd( user.passwd )
                 # api_key
                 orig_apikey = meta.get('openai_api_key')
-                if CrabDB._eqpw( user.openai_api_key, orig_apikey):
+                if f"{user.openai_api_key}"==CrabDB._before_crab(orig_apikey):
                     user.openai_api_key = orig_apikey
                 else:
                     user.openai_api_key = self._crypt_apikey( user.openai_api_key )
@@ -1033,6 +1094,8 @@ class CrabDB:
                 user.passwd = self._crypt_passwd( user.passwd )
                 user.openai_api_key = self._crypt_apikey( user.openai_api_key )
             collection.upsert( ids=[user.to_key()], metadatas=[user.to_meta()], embeddings=[EmptyEmbedding] )
+            user.passwd = emptyToBlank( user.passwd, '' )[:18]
+            user.openai_api_key = CrabDB._before_crab(user.openai_api_key)
         return user
 
     def delete_user(self, userId:int ) -> CrabUser:
@@ -1051,25 +1114,6 @@ class CrabDB:
             for user in self.get_users():
                 if user.xId == userId:
                     return user.name
-        return None
-
-    def login(self, username, passwd='' ):
-        user:CrabUser = self.get_user( username )
-        if user is not None and user.name == username:
-            hash = ''
-            try:
-                if not isEmpty(user.passwd):
-                    hash = self._decrypt(user.passwd)
-            except:
-                if user.xId != ROOT_ID:
-                    return None
-            if isEmpty(hash):
-                if not isEmpty(passwd):
-                    return None
-            else:
-                if hash != to_md5(passwd):
-                    return None
-            return CrabSession( db=self, user=user )
         return None
 
     def get_bots(self, user_id:int) ->list[CrabBot]:
@@ -1929,14 +1973,6 @@ class CrabSession:
         self.last:float = self.login
         self.current_thread:CrabThread = None
 
-    def _get_openai_api_key(self) ->str:
-        if self.is_root(self.user):
-            return self.db.get_public_openai_key()
-        k:str = decode_openai_api_key( self.user.openai_api_key )
-        if isEmpty(k) and self.user.share_key:
-            k = self.db.get_public_openai_key()
-        return k
-
     def _close_current_thread(self):
         if self.current_thread is not None:
             self.db.close_thread( self.current_thread )
@@ -1968,6 +2004,10 @@ class CrabSession:
     def upsert_user( self, user ):
         self._update()
         self.db.upsert_user( self.user.xId, user )
+
+    def _get_openai_api_key(self) ->str:
+        self._update()
+        return self.db.get_openai_key( self.user.xId )
 
     def get_bots(self) ->list[CrabBot]:
         self._update()
