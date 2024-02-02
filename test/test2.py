@@ -1,14 +1,14 @@
 import sys, os, unittest
 sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
-from crabDB import CrabDB, CrabSession, CrabThread, CrabBot, CrabMessage, CrabFileSegment
+from crabDB import CrabDB, CrabSession, CrabThread2, CrabBot, CrabMessage, CrabFileSegment
 
 class TestA(unittest.TestCase):
 
     def test_sample(self):
         DB:CrabDB = CrabDB( on_memory=True)
         Session:CrabSession = DB.login( 'root' )
-        Thre:CrabThread = Session.get_current_thread()
+        Thre:CrabThread2 = Session.get_current_thread()
 
         data=[
             ['お好み焼の店は？', '金太とか千房とかかな'],

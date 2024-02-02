@@ -602,6 +602,34 @@ class CrabFileSegment(CrabContentType):
     def to_content(self):
         return self.content
 
+class CrabThread(CrabType):
+
+    def __init__(self, *, id:int=None, botId:int=None, title=None, owner=None, auth=None, createTime=None ):
+
+        super().__init__(id=id)
+        self.title:str = emptyToBlank( title, '' )
+        self.owner:int = decodeId( owner)
+        self.auth:list[str] = decodeIds(auth)
+        self.botId:int = decodeId(botId)
+        self.createTime:float = parseFloat( createTime, 0.0 )
+        if self.createTime < 0.1:
+            self.createTime = time.time()
+        #
+
+    def to_meta(self):
+        return self.encode()
+
+    def encode(self):
+        return {
+            'id': self.xId,
+            'title': self.title,
+            'owner': encodeId(self.owner),
+            'auth': encodeIds( self.auth),
+            'botId': encodeId(self.botId),
+            'createTime': self.createTime,
+        }
+
+
 class DummyEmbeddingFunction(chromadb.EmbeddingFunction[chromadb.Documents]):
     def __init__(self):
         pass
@@ -1338,7 +1366,7 @@ class CrabDB:
                         thre.title = new_title
                         self.upsert_datas( 'threads', [thre] )
                 except:
-                    pass
+                    traceback.print_exc()
 
     def _task_embedding_index_message(self, userId:int, ids:list[int], *, api_key:str=None, task:CrabTask=None ):
         check_openai_api_key( api_key )
@@ -1712,36 +1740,14 @@ class CrabDB:
                 ccollection.update( ids=x_ids, documents=x_contents, embeddings=x_embs, metadatas=x_metas )
             offset += len(datas)
 
-class CrabThread(CrabType):
+class CrabThread2(CrabThread):
 
-    def __init__(self, *, session=None, id:int=None, botId:int=None, title=None, owner=None, auth=None, createTime=None ):
-
+    def __init__(self, *, session, t:CrabThread ):
+        super().__init__(id=t.xId,botId=t.botId,title=t.title, owner=t.owner, auth=t.auth, createTime=t.createTime)
         self._session:CrabSession = session
-        super().__init__(id=id)
-        self.title:str = emptyToBlank( title, '' )
-        self.owner:int = decodeId( owner)
-        self.auth:list[str] = decodeIds(auth)
-        self.botId:int = decodeId(botId)
         self.messages:list[CrabMessage] = None
         self.total = 0
-        self.createTime:float = parseFloat( createTime, 0.0 )
-        if self.createTime < 0.1:
-            self.createTime = time.time()
-        #
         self.bot:CrabBot = None
-
-    def to_meta(self):
-        return self.encode()
-
-    def encode(self):
-        return {
-            'id': self.xId,
-            'title': self.title,
-            'owner': encodeId(self.owner),
-            'auth': encodeIds( self.auth),
-            'botId': encodeId(self.botId),
-            'createTime': self.createTime,
-        }
 
     def close(self):
         pass
@@ -1895,7 +1901,7 @@ class CrabThread(CrabType):
                     yield "retrive files"
                 segs:list = self._session._retrive_file( fileIds=bot.files, emb=query_embedding, max_distance=max_distance )
             # 入力トークン調整:リストを結合
-            retrive_tokens = CrabThread._trim_retrive_messages( (hist_messges,segs), (max_input_tokens-input_tokens)//2)
+            retrive_tokens = CrabThread2._trim_retrive_messages( (hist_messges,segs), (max_input_tokens-input_tokens)//2)
             input_tokens += retrive_tokens
             # 入力トークン調整:制限を超えるメッセージにマーキング
             last_tokens = CrabMessage.trim_messages( tail_messages, (max_input_tokens-input_tokens) )
@@ -1965,7 +1971,7 @@ class CrabSession:
         self.user:CrabUser = user
         self.login:float = time.time()
         self.last:float = self.login
-        self.current_thread:CrabThread = None
+        self.current_thread:CrabThread2 = None
 
     def _close_current_thread(self):
         if self.current_thread is not None:
@@ -2029,15 +2035,19 @@ class CrabSession:
     def get_current_thread(self):
         self._update()
         if self.current_thread is None:
-            self.current_thread = self.db.create_new_thread( self.user.xId )
+            thre = self.db.create_new_thread( self.user.xId )
+            self.current_thread = CrabThread2( session=self, t=thre )
+        else:
+            thre = self.db.get_thread( self.user.xId, self.current_thread.xId )
+            self.current_thread.title = thre.title
         self.current_thread._session = self
         return self.current_thread
 
     def create_thread(self,botId):
         self._update()
         self._close_current_thread()
-        self.current_thread = self.db.create_new_thread( self.user.xId, botId=botId )
-        self.current_thread._session = self
+        thre = self.db.create_new_thread( self.user.xId, botId=botId )
+        self.current_thread = CrabThread2( session=self, t=thre )
 
     def set_current_thread(self,threId:int=None):
         self._update()
@@ -2049,8 +2059,7 @@ class CrabSession:
         thre = self.db.get_thread(self.user.xId, threId)
         if thre is not None:
             self._close_current_thread()
-            self.current_thread = thre
-            self.current_thread._session = self
+            self.current_thread =  CrabThread2( session=self, t=thre )
 
     def update_thread_auth(self, threId:int, auth ):
         self._update()

@@ -4,7 +4,7 @@ import unittest
 sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
 import tiktoken
-from crabDB import CrabTask, CrabDB, CrabSession, CrabThread, CrabBot, CrabMessage, CrabFileSegment
+from crabDB import CrabTask, CrabDB, CrabSession, CrabThread2, CrabBot, CrabMessage, CrabFileSegment
 from test_data_download import download_and_extract_zip
 
 def str_dump( value, max:int=100 ) ->str:
@@ -94,7 +94,7 @@ class TestA(unittest.TestCase):
         print("[TRIM]")
         print(f"total_tokens:{total_tokens}")
         target_tokens = total_tokens//2
-        ret_tokens = CrabThread._trim_retrive_messages( (hist_messages,file_segments), target_tokens )
+        ret_tokens = CrabThread2._trim_retrive_messages( (hist_messages,file_segments), target_tokens )
         print(f"ret_tokens:{ret_tokens}")
 
         input_tokens = 0
@@ -115,7 +115,7 @@ class TestA(unittest.TestCase):
         # login
         client:CrabDB = CrabDB( on_memory=True )
         Session:CrabSession = client.login( 'root' )
-        Thre:CrabThread = Session.get_current_thread()
+        Thre:CrabThread2 = Session.get_current_thread()
         # load text
         with open(file_path,'r',encoding='cp932') as file:
             file_contents=file.read()

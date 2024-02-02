@@ -1,7 +1,7 @@
 import streamlit as st
 from openai import OpenAI
 from openai.types import CreateEmbeddingResponse
-from crabDB import CrabDB, CrabSession, CrabUser, CrabBot, CrabThread
+from crabDB import CrabDB, CrabSession, CrabUser, CrabBot, CrabThread2
 
 ai_title = '蟹カニAI'
 
@@ -83,7 +83,7 @@ def main():
     st.set_page_config(page_title=ai_title,layout="wide")
 
     edit_target:CrabBot = st.session_state.get('edit')
-    current_thread:CrabThread = SESSION.get_current_thread() if edit_target is None else None
+    current_thread:CrabThread2 = SESSION.get_current_thread() if edit_target is None else None
 
     def handle_thread_auth():
         if current_thread is not None:
@@ -341,6 +341,6 @@ def main():
                         else:
                             assistant_msg += tmp_assistant_msg
                         assistant_response_area.write(assistant_msg)
-
+                st.rerun()
 if __name__ == "__main__":
     main()
