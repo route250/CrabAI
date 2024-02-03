@@ -128,7 +128,7 @@ def main():
                 auth_idx = 0 if current_thread.auth is None or len(current_thread.auth)==0 else 1
                 st.selectbox( label='auth', key='thre_auth', options=['public','private'], index=auth_idx, on_change=handle_thread_auth, disabled=is_not_owner )
 
-        st.header('bots',divider='gray')
+        st.header('Crabs',divider='gray')
         bot_col1, bot_col2 = st.columns([3,1])
         for bot in SESSION.get_bots():
             with bot_col1:
@@ -153,7 +153,7 @@ def main():
 
     if isinstance( edit_target, CrabBot ):
         SESSION.set_current_thread()
-        is_not_owner = UserId != edit_target.owner
+        is_not_owner = edit_target.xId==200 or UserId != edit_target.owner
         # ボット編集
         def handle_bot_save( edit_bot:CrabBot ):
             if is_not_owner:
