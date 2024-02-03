@@ -6,7 +6,7 @@
     "configurations": [
         {
             "name": "Python: 現在のファイル",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "program": "${file}",
             "console": "integratedTerminal",
@@ -14,7 +14,7 @@
         },
         {
             "name": "Streamlit: crabai-st.py",
-            "type": "python",
+            "type": "debugpy",
             "request": "launch",
             "module": "streamlit",
             "console": "integratedTerminal",
@@ -22,6 +22,17 @@
                 "PYTHONPATH": "${workspaceFolder}",
             },
             "args": [ "run", "src/crabai-st.py","--server.port","5678" ],
-        }
+        },
+        {
+            "name": "Streamlit: main-st.py",
+            "type": "debugpy",
+            "request": "launch",
+            "module": "streamlit",
+            "console": "integratedTerminal",
+            "env": {
+                "PYTHONPATH": "${workspaceFolder}",
+            },
+            "args": [ "run", "src/main-st.py","--server.port","5678" ],
+        },
     ]
 }

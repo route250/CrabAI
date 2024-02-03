@@ -329,7 +329,9 @@ class CrabBot(CrabType):
         except:
             return 3
 
+    MRK="<|MRK|>"
     CLS="<|CLS|>"
+    UPD="<|UPD|>"
 
     @staticmethod
     def get_model_name_list() ->list[str]:
@@ -1290,12 +1292,15 @@ class CrabDB:
         return messages, emb
 
     def create_index_message(self, threId:int, userId:int=None, *, api_key:str=None ):
-        check_openai_api_key( api_key )
-        self.task_submit( self._task_create_index_message, userId, [threId], api_key=api_key )
+        #check_openai_api_key( api_key )
+        #self.task_submit( self._task_create_index_message, userId, [threId], api_key=api_key )
+        updates:list[bool] = self._task_create_index_message( userId, [threId], api_key=api_key)
+        return updates[0]
 
     def _task_create_index_message(self, userId:int, ids:list[int], *, api_key:str=None, tokens=1500, task:CrabTask=None ):
         check_openai_api_key( api_key )
-        for threId in ids:
+        updates:list[bool] =[False] *len(ids)
+        for idx,threId in enumerate(ids):
             if not checkId(threId):
                 continue
             #
@@ -1355,18 +1360,20 @@ class CrabDB:
                     prompt = f"# Create a thread title from the following conversation.\n\n{contents}\n\n# Output only the title. No other explanations or conversations are required."
                     # LLM
                     client:OpenAI = OpenAI( api_key=api_key )
-                    res: ChatCompletion = client.chat.completions.create(
+                    llm_res: ChatCompletion = client.chat.completions.create(
                         messages=[ { 'role': CrabMessage.SYSTEM, 'content': prompt } ],
                         model='gpt-3.5-turbo', max_tokens=100
                     )
                     # result
-                    new_title = res.choices[0].message.content
+                    new_title = llm_res.choices[0].message.content
                     if not isEmpty(new_title):
                         # update title
                         thre.title = new_title
                         self.upsert_datas( 'threads', [thre] )
+                        updates[idx] = True
                 except:
                     traceback.print_exc()
+        return updates
 
     def _task_embedding_index_message(self, userId:int, ids:list[int], *, api_key:str=None, task:CrabTask=None ):
         check_openai_api_key( api_key )
@@ -1815,7 +1822,7 @@ class CrabThread2(CrabThread):
         self.add_message({"role": "assistant", "content": message})
 
     def create_index_message(self):
-        self._session.create_index_message( self.xId )
+        return self._session.create_index_message( self.xId )
 
     @staticmethod
     def _trim_retrive_messages( arrays:[list[list[CrabType]]], max_tokens ):
@@ -1872,16 +1879,14 @@ class CrabThread2(CrabThread):
             if bot.llm:
                 # llmを使う場合
                 if verbose:
-                    yield CrabBot.CLS
-                    yield "get last messages..."
+                    yield CrabBot.MRK + "get last messages..."
                 tail_messages, query_embedding = self._session._get_tail_messages(self.xId, 10)
                 excludeId= tail_messages[0].xId if len(tail_messages)>0 else 0
             elif bot.retrive or xrag:
                 # llmを使わないが検索だけする場合
                 chunk_count = 1
                 if verbose:
-                    yield CrabBot.CLS
-                    yield "get embedding..."
+                    yield CrabBot.MRK + "get embedding..."
                 mesgs, query_embedding = self._session._get_tail_messages( self.xId, chunk_count )
                 excludeId= mesgs[0].xId if len(mesgs)>0 else 0
             # 過去の会話履歴を検索する
@@ -1889,16 +1894,14 @@ class CrabThread2(CrabThread):
             if bot.retrive:
                 max_distance = 0.3
                 if verbose:
-                    yield CrabBot.CLS
-                    yield "retrive messages..."
+                    yield CrabBot.MRK + "retrive messages..."
                 hist_messges:list = self._session._retrive_message( botId=self.botId, emb=query_embedding, excludeId=excludeId, max_distance=max_distance )
             # ファイルから検索する
             segs:list = None
             if xrag:
                 max_distance = 0.3
                 if verbose:
-                    yield CrabBot.CLS
-                    yield "retrive files"
+                    yield CrabBot.MRK + "retrive files"
                 segs:list = self._session._retrive_file( fileIds=bot.files, emb=query_embedding, max_distance=max_distance )
             # 入力トークン調整:リストを結合
             retrive_tokens = CrabThread2._trim_retrive_messages( (hist_messges,segs), (max_input_tokens-input_tokens)//2)
@@ -1923,8 +1926,7 @@ class CrabThread2(CrabThread):
             stream = None
             if bot.llm:
                 if verbose:
-                    yield CrabBot.CLS
-                    yield "execute LLM..."
+                    yield CrabBot.MRK + "execute LLM..."
                 try:
                     client:OpenAI = OpenAI( api_key=self._session._get_openai_api_key())
                     stream = client.chat.completions.create(
@@ -1942,7 +1944,10 @@ class CrabThread2(CrabThread):
                     if not isEmpty(buffer):
                         self.add_assistant_message( buffer )
                         # reindex
-                        self.create_index_message()
+                        yield CrabBot.MRK + "index message..."
+                        update:bool = self.create_index_message()
+                        if update:
+                            yield CrabBot.UPD
                 except openai.OpenAIError as ex:
                     yield f"{ex}"
                 except Exception as ex:
@@ -2078,7 +2083,7 @@ class CrabSession:
 
     def create_index_message( self, threId:int ):
         self._update()
-        self.db.create_index_message( threId, self.user.xId, api_key=self._get_openai_api_key() )
+        return self.db.create_index_message( threId, self.user.xId, api_key=self._get_openai_api_key() )
 
     def _get_tail_messages(self, threId:int, num:int=10 )->list[CrabMessage]:
         self._update()

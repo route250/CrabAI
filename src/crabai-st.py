@@ -329,18 +329,26 @@ def main():
                     st.markdown(user_input)
                 # 非同期実行
                 response = current_thread.run(user_input)
+                is_rerun:bool=False
                 # ChatBotの返答を表示する 
                 with st.chat_message("assistant"):
-                    assistant_msg:str = ""
                     assistant_response_area = st.markdown("")
+                    assistant_msg:str = ""
                     for part in response:
                         # 回答を逐次表示
-                        tmp_assistant_msg = part or ""
-                        if tmp_assistant_msg == CrabBot.CLS:
-                            assistant_msg=""
+                        part = part or ""
+                        if part == CrabBot.UPD:
+                            is_rerun = True
+                        elif part.startswith(CrabBot.MRK):
+                            assistant_response_area.write(assistant_msg + part[len(CrabBot.MRK):] )
                         else:
-                            assistant_msg += tmp_assistant_msg
-                        assistant_response_area.write(assistant_msg)
-                st.rerun()
+                            if part == CrabBot.CLS:
+                                assistant_msg=""
+                            else:
+                                assistant_msg += part
+                            assistant_response_area.write(assistant_msg)
+                    assistant_response_area.write(assistant_msg)
+                if is_rerun:
+                    st.rerun()
 if __name__ == "__main__":
     main()
