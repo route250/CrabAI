@@ -5,7 +5,7 @@ from openai import OpenAI, OpenAIError
 import tiktoken
 
 # embeddingキャッシュの保存先
-basedir = "tmp/embcache"
+base_cachedir = os.path.join( "tmp","embcache" )
 
 def isEmpty(value) ->bool:
     if isinstance(value,str):
@@ -18,12 +18,14 @@ def to_md5( text:str ) ->str:
     hash_md5.update(text.encode())
     return hash_md5.hexdigest()
 
-def to_path( model:str, dimensions:int, text:str )->str:
+def to_path( model:str, dimensions:int, text:str, cachedir=None )->str:
     """モデル名と次元数とテキストから保存先パスへ変換する"""
+    if not cachedir:
+        cachedir = base_cachedir
     md5 = to_md5(text)
     if dimensions:
         model = f"{model}_{dimensions}"
-    return os.path.join(basedir,model,md5[:4],md5)
+    return os.path.join(cachedir,model,md5[:4],md5)
 
 def load_emb(filepath) -> list[float]:
     """ファイルが存在していればembeddingをロードする"""
@@ -43,7 +45,7 @@ def save_emb(filepath, emb: list[float]):
     except:
         pass
 
-def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, timeout:float=None ):
+def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, timeout:float=None, cachedir=None ):
     """キャッシング付きembedding関数"""
     # 入力テキストの型判定
     if not isinstance(input,list):
@@ -60,7 +62,7 @@ def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, tim
         text = input_list[i]
         if not isinstance(text,str):
             continue
-        md5path = md5path_list[i] = to_path(model,dimensions,text)
+        md5path = md5path_list[i] = to_path(model,dimensions,text,cachedir=cachedir)
         emb = emb_list[i] = load_emb(md5path)
         if not emb:
             reqest_list.append( input_list[i] )
@@ -84,8 +86,29 @@ def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, tim
 
     return emb_list,tokens
 
-def cosine_similarity(a, b):
-    return np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b))
+class EmbeddingFunction:
+
+    def __init__( self, client:OpenAI, model:str, dimensions:int=None, timeout:float=None ):
+        self.client:OpenAI = client
+        self.model:str = model
+        self.dimensions:int = dimensions
+        self.timeout:float = timeout
+
+    def __str__(self) ->str:
+        if self.dimensions:
+            return f"{self.model}_{self.dimensions}"
+        else:
+            return self.model
+
+    def simple_name(self) ->str:
+        return str(self).replace('text-embedding-','')
+
+    def __call__( self, input, timeout:float=None ):
+        tm:float = timeout if timeout else self.timeout
+        return create_embeddings( self.client, input=input, model=self.model, dimensions=self.dimensions, timeout=tm )
+
+def cosine_similarity( vec1, vec2 ):
+    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
 
 def split_text(text: str, tokens: int = 1024) -> list[str]:
     result = []
