@@ -1,0 +1,1 @@
+from ._impl.embedding import create_embeddings as create_embeddings
