@@ -4,6 +4,7 @@ import unittest
 from openai import OpenAI, OpenAIError
 import tiktoken
 import matplotlib.pyplot as plt
+import matplotlib.colors as mcolors
 import japanize_matplotlib
 #from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 sys.path.append( os.getcwd()+"/test")
@@ -12,16 +13,42 @@ from test_data_download import download_and_extract_zip
 
 from crab.embeddings import EmbeddingFunction, create_embeddings, cosine_similarity, split_text
 
+def adjust_saturation(color_name, saturation_level):
+    """
+    Adjust the saturation of a given color name to a specified level.
+    
+    Parameters:
+    - color_name: The name of the color (e.g., 'red').
+    - saturation_level: The desired saturation level (0 to 1).
+    
+    Returns:
+    - A tuple representing the RGB values of the adjusted color.
+    """
+    # Convert color name to RGB
+    original_rgb = mcolors.to_rgb(color_name)
+    # Convert RGB to HSV
+    original_hsv = mcolors.rgb_to_hsv(original_rgb)
+    # Adjust the saturation
+    adjusted_hsv = original_hsv.copy()
+    adjusted_hsv[1] = saturation_level
+    # Convert back to RGB
+    adjusted_rgb = mcolors.hsv_to_rgb(adjusted_hsv)
+    return adjusted_rgb
+
+# Example usage: adjust the saturation of 'red' to 70%
+adjusted_color = adjust_saturation('red', 0.7)
+adjusted_color
+
 def text_filter( input ):
     input_list = input if isinstance(input,list) else [input]
     result_list = [ re.sub( r'《[^》]*》', '', txt ) if isinstance(txt,str) else txt for txt in input_list ]
     return result_list if isinstance(input,list) else result_list[0]
 
 class EmbeddingFunc(EmbeddingFunction):
-    def __init__(self, client, model, dim=None, *, color='r', color2='r' ):
+    def __init__(self, client, model, dim=None, *, color='r', color2=None ):
         super().__init__( client, model=model, dimensions=dim )
         self.color = color
-        self.color2 = color2
+        self.color2 = color2 if color2 else adjust_saturation(color,0.4)
 
 client:OpenAI = OpenAI()
 fn_3small = EmbeddingFunc(client,"text-embedding-3-small", color='blue')
@@ -167,34 +194,30 @@ def main():
     # テキストをロード
     with open( input_text_file, 'r', encoding='cp932') as file:
         text_data = file.read()
-    # 最小分割
-    segments_map = {
-        64: split_text( text_data, 64 )
-    }
-
-    # 分割結果をダンプ
-    basename_without_ext = os.path.splitext(os.path.basename(input_text_file))[0]
-    segments_dump_file = os.path.join( "tmp", f"{basename_without_ext}_segments.txt" )
-    with open(segments_dump_file, 'w', encoding='utf-8' ) as out:
-        for i,txt in enumerate( segments_map.get(64) or [] ):
-            out.write(f"# Segment 64:{i} 128:{i//2} 256:{i//4} 512:{i//8} 1024:{i//16}\n")
-            out.write(txt)
-            out.write("\n\n")
-    
+    # 分割キャッシュ
+    split_cache = {}
+   
     for case_no, test_case in enumerate(test_case_list):
 
         split_tokens:int = test_case.get('tokens',1024)
-        segment_text_list = segments_map.get(split_tokens)
+        segment_text_list = split_cache.get(split_tokens)
         if not segment_text_list:
-            segment_text_list = segments_map[split_tokens] = split_text( text_data, split_tokens )
-        xticks = [ (s*split_tokens)//64 for s in range(0,len(segment_text_list))]
+            segment_text_list = split_cache[split_tokens] = split_text( text_data, split_tokens )
+            # 分割結果をダンプ
+            basename_without_ext = os.path.splitext(os.path.basename(input_text_file))[0]
+            segments_dump_file = os.path.join( "tmp", f"{basename_without_ext}_split_{split_tokens}.txt" )
+            with open(segments_dump_file, 'w', encoding='utf-8' ) as out:
+                for i,txt in enumerate( segment_text_list or [] ):
+                    out.write(f"# Segment {i}\n")
+                    out.write(txt)
+                    out.write("\n\n")
+
         xticks = [ s for s in range(0,len(segment_text_list))]
         query_title = '\n'.join( [ f"{get_marker_title(qidx)}:{ text_filter(query.get('text'))}" for qidx,query in enumerate(test_case.get('query',[]))] )
 
         #fn_sim = SklearnSimFunc()
         fn_sim = CrabSimFunc()
         plt.figure(figsize=(17, 9))
-        plt.subplots_adjust(left=0.05)
         plt.suptitle( f'コサイン類似度の比較 Case{case_no} SegmentSize:{split_tokens}')
         plt.title( query_title,fontsize=10)
         plt.xlabel('Segment')
@@ -217,9 +240,10 @@ def main():
                 txt = text_filter( query.get('text','') )
                 query_emb, tokens = fn( txt )
                 sim_list = [ fn_sim(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
+                cl = fn.color if query.get('segments') else fn.color2
                 tt = '-' if query.get('segments') else '--'
-                lw = 1 if query.get('segments') else 0.5
-                plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=fn.color, linestyle=tt, marker=get_marker(q),  linewidth=lw )
+                lw = 1 #if query.get('segments') else 0.5
+                plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=cl, linestyle=tt, marker=get_marker(q),  linewidth=lw )
                 x=0
                 y=sim_list[0]
                 for i,s in enumerate(sim_list):
@@ -227,7 +251,7 @@ def main():
                         x=i
                         y=s
                 sw = fn.color if query.get('segments') else 'gray'
-                plt.plot( x, y, 'o', ms=18, mfc='none', mec=sw, mew=1 )
+                plt.plot( x, y, 'o', ms=18, mfc='none', mec=cl, mew=lw )
 
         #plt.show()
         image_file_path = os.path.join( "tmp", f'model_scores_plot_{case_no}.png' )
