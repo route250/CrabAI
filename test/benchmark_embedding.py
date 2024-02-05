@@ -11,7 +11,7 @@ sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
 from test_data_download import download_and_extract_zip
 
-from crab.embeddings import EmbeddingFunction, create_embeddings, cosine_similarity, split_text
+from crab.embeddings import EmbeddingFunction, create_embeddings, squared_l2_distance, inner_product, cosine_similarity, split_text
 
 def adjust_saturation(color_name, saturation_level):
     """
@@ -108,7 +108,8 @@ test_case_list = [
             { 'text':'メロスを殴ったのは誰ですか？', 'segments':[174,175] },
             { 'text': 'メロスを殴ったのは誰', 'segments': [174,175] },
             { 'text': 'メロスを殴ったのは', 'segments': [174,175] },
-        ]
+        ],
+        'functions': [cosine_similarity, inner_product, squared_l2_distance ]
     },
     { 
         'tokens': 128,
@@ -196,8 +197,13 @@ def main():
         text_data = file.read()
     # 分割キャッシュ
     split_cache = {}
-   
-    for case_no, test_case in enumerate(test_case_list):
+    case_no:int = 0
+    for test_case in test_case_list:
+
+        test_case_query_list = test_case.get('query') or []
+        test_case_model_list = test_case.get('models') or []
+        if not test_case_model_list or not test_case_query_list:
+            continue
 
         split_tokens:int = test_case.get('tokens',1024)
         segment_text_list = split_cache.get(split_tokens)
@@ -213,49 +219,68 @@ def main():
                     out.write("\n\n")
 
         xticks = [ s for s in range(0,len(segment_text_list))]
-        query_title = '\n'.join( [ f"{get_marker_title(qidx)}:{ text_filter(query.get('text'))}" for qidx,query in enumerate(test_case.get('query',[]))] )
 
-        #fn_sim = SklearnSimFunc()
-        fn_sim = CrabSimFunc()
-        plt.figure(figsize=(17, 9))
-        plt.suptitle( f'コサイン類似度の比較 Case{case_no} SegmentSize:{split_tokens}')
-        plt.title( query_title,fontsize=10)
-        plt.xlabel('Segment')
-        plt.xticks( xticks )
-        plt.ylabel( str(fn_sim) )
-        plt.ylim(0, 1)  # Keeping the y-axis range from 0 to 1
-        plt.grid(True)
+        fn_sim_list = test_case.get('functions') or cosine_similarity #CrabSimFunc()
+        fn_sim_list = fn_sim_list if isinstance(fn_sim_list,list) else [fn_sim_list]
 
-        for m,mm in enumerate( test_case.get('models',[]) ):
-            plt.text( 0, 1.01+(0.03*m), f'{str(mm)}:{mm.color}', color=mm.color, fontsize=12)
+        for fn_sim in fn_sim_list:
+            case_no += 1
+            ylabel = fn_sim.__name__
+            print(f"start case:{case_no} {ylabel}")
 
-        segments = [ (x*64)//split_tokens for query in test_case.get('query', []) for x in query.get('segments', [])]
-        segments = sorted(set(segments))
-        for x in segments:
-            plt.axvline( x=x, color='r' )
-    
-        for fn in test_case.get('models',[]):
-            segment_emb_list, tokens = fn( text_filter(segment_text_list) )
-            for q,query in enumerate(test_case.get('query',[])):
-                txt = text_filter( query.get('text','') )
-                query_emb, tokens = fn( txt )
-                sim_list = [ fn_sim(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
-                cl = fn.color if query.get('segments') else fn.color2
-                tt = '-' if query.get('segments') else '--'
-                lw = 1 #if query.get('segments') else 0.5
-                plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=cl, linestyle=tt, marker=get_marker(q),  linewidth=lw )
-                x=0
-                y=sim_list[0]
-                for i,s in enumerate(sim_list):
-                    if s>y:
-                        x=i
-                        y=s
-                sw = fn.color if query.get('segments') else 'gray'
-                plt.plot( x, y, 'o', ms=18, mfc='none', mec=cl, mew=lw )
+            is_not_distance = fn_sim != squared_l2_distance
 
-        #plt.show()
-        image_file_path = os.path.join( "tmp", f'model_scores_plot_{case_no}.png' )
-        plt.savefig(image_file_path)
+            plt.figure(figsize=(17, 9))
+            plt.suptitle( f' Case{case_no} {ylabel}の比較 分割サイズ:{split_tokens}')
+            plt.xlabel('Segment')
+            plt.xticks( xticks )
+            plt.ylabel( ylabel )
+            plt.grid(True)
+
+            xpos2 = len(segment_text_list)*-0.05
+            ybase = 1.01 if is_not_distance else -0.02
+            yheight = 0.03 if is_not_distance else -0.06
+            for qidx,query in enumerate(test_case_query_list):
+                ypos = ybase + yheight*( len(test_case_query_list)-qidx-1)
+                plt.text( xpos2,ypos, f"{get_marker_title(qidx)}:{ text_filter(query.get('text'))}", fontsize=12 )
+
+            xpos2 = len(segment_text_list)*0.8
+            for midx,mm in enumerate( test_case_model_list ):
+                ypos = ybase + yheight*( len(test_case_model_list)-midx-1)
+                plt.text( xpos2, ypos, f'{str(mm)}:{mm.color}', color=mm.color, fontsize=12)
+
+            segments = [ (x*64)//split_tokens for query in test_case_query_list for x in query.get('segments', [])]
+            segments = sorted(set(segments))
+            for x in segments:
+                plt.axvline( x=x, color='r' )
+        
+            global_min = None
+            global_max = None
+            for fn in test_case_model_list:
+                segment_emb_list, tokens = fn( text_filter(segment_text_list) )
+                for q,query in enumerate(test_case_query_list):
+                    txt = text_filter( query.get('text','') )
+                    query_emb, tokens = fn( txt )
+                    sim_list = [ fn_sim(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
+                    ymin = min(sim_list)
+                    global_min = ymin if global_min is None or ymin<global_min else global_min
+                    ymax = max(sim_list)
+                    global_max = ymax if global_max is None or ymax>global_max else global_max
+                    cl = fn.color if query.get('segments') else fn.color2
+                    tt = '-' if query.get('segments') else '--'
+                    lw = 1 #if query.get('segments') else 0.5
+                    plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=cl, linestyle=tt, marker=get_marker(q),  linewidth=lw )
+                    mark_y = ymax if fn_sim != squared_l2_distance else ymin
+                    mark_x = sim_list.index(mark_y)
+                    sw = fn.color if query.get('segments') else 'gray'
+                    plt.plot( mark_x, mark_y, 'o', ms=18, mfc='none', mec=cl, mew=lw )
+            if is_not_distance:
+                plt.ylim(0, 1) 
+            else:
+                plt.ylim( int(global_max+1),0)
+            #plt.show()
+            image_file_path = os.path.join( "tmp", f'embedding_scores_plot_{case_no}_{ylabel}.png' )
+            plt.savefig(image_file_path)
 
 if __name__ == "__main__":
     main()

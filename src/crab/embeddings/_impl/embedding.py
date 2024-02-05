@@ -107,8 +107,65 @@ class EmbeddingFunction:
         tm:float = timeout if timeout else self.timeout
         return create_embeddings( self.client, input=input, model=self.model, dimensions=self.dimensions, timeout=tm )
 
-def cosine_similarity( vec1, vec2 ):
-    return np.dot(vec1, vec2) / (np.linalg.norm(vec1) * np.linalg.norm(vec2))
+def cosine_similarity(A, B):
+    """
+    Calculate the cosine similarity between two vectors A and B using NumPy.
+    
+    Parameters:
+    A (numpy array): The first vector.
+    B (numpy array): The second vector.
+    
+    Returns:
+    float: The cosine similarity between vectors A and B.
+    """
+    # Convert lists to numpy arrays if they are not already
+    A = np.asarray(A)
+    B = np.asarray(B)
+    
+    # Calculate the cosine similarity using NumPy operations
+    dot_product = np.dot(A, B)
+    norm_A = np.linalg.norm(A)
+    norm_B = np.linalg.norm(B)
+    cosine_similarity = dot_product / (norm_A * norm_B)
+    return cosine_similarity
+
+def inner_product(A, B):
+    """
+    Calculate the inner product between two vectors A and B using NumPy.
+    
+    Parameters:
+    A (numpy array): The first vector.
+    B (numpy array): The second vector.
+    
+    Returns:
+    float: The inner product between vectors A and B.
+    """
+    # Convert lists to numpy arrays if they are not already
+    A = np.asarray(A)
+    B = np.asarray(B)
+    
+    # Calculate the inner product using NumPy operations
+    product = np.dot(A, B)
+    return product
+
+def squared_l2_distance(A, B):
+    """
+    Calculate the squared L2 distance between two vectors A and B using NumPy.
+    
+    Parameters:
+    A (numpy array): The first vector.
+    B (numpy array): The second vector.
+    
+    Returns:
+    float: The squared L2 distance between vectors A and B.
+    """
+    # Convert lists to numpy arrays if they are not already
+    A = np.asarray(A)
+    B = np.asarray(B)
+    
+    # Calculate the squared L2 distance using NumPy operations
+    distance = np.sum((A - B) ** 2)
+    return distance
 
 def split_text(text: str, tokens: int = 1024) -> list[str]:
     result = []
