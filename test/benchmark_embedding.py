@@ -5,16 +5,23 @@ from openai import OpenAI, OpenAIError
 import tiktoken
 import matplotlib.pyplot as plt
 import japanize_matplotlib
+#from sklearn.metrics.pairwise import cosine_similarity as sklearn_cosine_similarity
 sys.path.append( os.getcwd()+"/test")
 sys.path.append( os.getcwd()+"/src")
 from test_data_download import download_and_extract_zip
 
 from crab.embeddings import EmbeddingFunction, create_embeddings, cosine_similarity, split_text
 
+def text_filter( input ):
+    input_list = input if isinstance(input,list) else [input]
+    result_list = [ re.sub( r'《[^》]*》', '', txt ) if isinstance(txt,str) else txt for txt in input_list ]
+    return result_list if isinstance(input,list) else result_list[0]
+
 class EmbeddingFunc(EmbeddingFunction):
-    def __init__(self, client, model, dim=None, *, color='r' ):
+    def __init__(self, client, model, dim=None, *, color='r', color2='r' ):
         super().__init__( client, model=model, dimensions=dim )
         self.color = color
+        self.color2 = color2
 
 client:OpenAI = OpenAI()
 fn_3small = EmbeddingFunc(client,"text-embedding-3-small", color='blue')
@@ -23,14 +30,18 @@ fn_3large = EmbeddingFunc(client,"text-embedding-3-large", color='crimson')
 fn_3large_1536 = EmbeddingFunc(client,"text-embedding-3-large",1536, color='tomato')
 fn_3large_256 = EmbeddingFunc(client,"text-embedding-3-large",256, color='brown')
 fn_ada002 = EmbeddingFunc(client,"text-embedding-ada-002", color='green')
-Function_list=[
-    fn_3small,
-    fn_3large,
-    fn_3large_1536,
-    fn_3small_256,
-    fn_3large_256,
-    fn_ada002,
-]
+
+class CrabSimFunc:
+    def __str__(self)-> str:
+        return "crab cosine_similarity"
+    def __call__(self, v1, v2 ) ->float:
+        return cosine_similarity(v1,v2)
+
+# class SklearnSimFunc:
+#     def __str__(self)-> str:
+#         return "sklearn cosine_similarity"
+#     def __call__(self, v1, v2 ) ->float:
+#         return sklearn_cosine_similarity( [v1],[v2] )[0]
 
 input_text_file = download_and_extract_zip('hashire_merosu.txt')
 Query_list = [
@@ -137,7 +148,7 @@ test_case_list = [
 ]
 
 #query_markers
-xxx = [
+line_marker_list = [
     { 'title': '●', 'marker': 'o' },
     { 'title': '■', 'marker': 's' },
     { 'title': '▲', 'marker': '^' },
@@ -145,26 +156,30 @@ xxx = [
     { 'title': 'Ｘ', 'marker': 'x' },
 ]
 
-def get_marker( aa:int ) :
-    return xxx[ aa%len(xxx) ].get('marker','x')
+def get_marker( index:int ) :
+    return line_marker_list[ index%len(line_marker_list) ].get('marker','x')
 
-def get_marker_title( aa:int ) :
-    return xxx[ aa%len(xxx) ].get('title','x')
+def get_marker_title( index:int ) :
+    return line_marker_list[ index%len(line_marker_list) ].get('title','x')
 
-def main3():
+def main():
 
-    # テキストを分割
+    # テキストをロード
     with open( input_text_file, 'r', encoding='cp932') as file:
         text_data = file.read()
-    
+    # 最小分割
     segments_map = {
         64: split_text( text_data, 64 )
     }
 
-    for i,txt in enumerate(segments_map.get(64)):
-        print(f"# Segment:{i}")
-        print(txt)
-        print("\n")
+    # 分割結果をダンプ
+    basename_without_ext = os.path.splitext(os.path.basename(input_text_file))[0]
+    segments_dump_file = os.path.join( "tmp", f"{basename_without_ext}_segments.txt" )
+    with open(segments_dump_file, 'w', encoding='utf-8' ) as out:
+        for i,txt in enumerate( segments_map.get(64) or [] ):
+            out.write(f"# Segment 64:{i} 128:{i//2} 256:{i//4} 512:{i//8} 1024:{i//16}\n")
+            out.write(txt)
+            out.write("\n\n")
     
     for case_no, test_case in enumerate(test_case_list):
 
@@ -174,15 +189,17 @@ def main3():
             segment_text_list = segments_map[split_tokens] = split_text( text_data, split_tokens )
         xticks = [ (s*split_tokens)//64 for s in range(0,len(segment_text_list))]
         xticks = [ s for s in range(0,len(segment_text_list))]
-        query_title = '\n'.join( [ f"{get_marker_title(qidx)}:{query.get('text')}" for qidx,query in enumerate(test_case.get('query',[]))] )
+        query_title = '\n'.join( [ f"{get_marker_title(qidx)}:{ text_filter(query.get('text'))}" for qidx,query in enumerate(test_case.get('query',[]))] )
 
+        #fn_sim = SklearnSimFunc()
+        fn_sim = CrabSimFunc()
         plt.figure(figsize=(17, 9))
         plt.subplots_adjust(left=0.05)
         plt.suptitle( f'コサイン類似度の比較 Case{case_no} SegmentSize:{split_tokens}')
         plt.title( query_title,fontsize=10)
         plt.xlabel('Segment')
         plt.xticks( xticks )
-        plt.ylabel('cosine_similarity')
+        plt.ylabel( str(fn_sim) )
         plt.ylim(0, 1)  # Keeping the y-axis range from 0 to 1
         plt.grid(True)
 
@@ -195,24 +212,26 @@ def main3():
             plt.axvline( x=x, color='r' )
     
         for fn in test_case.get('models',[]):
-            segment_emb_list, tokens = fn( segment_text_list )
+            segment_emb_list, tokens = fn( text_filter(segment_text_list) )
             for q,query in enumerate(test_case.get('query',[])):
-                txt = query.get('text','')
+                txt = text_filter( query.get('text','') )
                 query_emb, tokens = fn( txt )
-                sim_list = [ cosine_similarity(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
+                sim_list = [ fn_sim(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
                 tt = '-' if query.get('segments') else '--'
-                plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=fn.color, linestyle=tt, marker=get_marker(q) )
+                lw = 1 if query.get('segments') else 0.5
+                plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=fn.color, linestyle=tt, marker=get_marker(q),  linewidth=lw )
                 x=0
                 y=sim_list[0]
                 for i,s in enumerate(sim_list):
                     if s>y:
                         x=i
                         y=s
-                plt.plot( x, y, 'o', ms=15, mfc='none', mec=fn.color, mew=1 )
+                sw = fn.color if query.get('segments') else 'gray'
+                plt.plot( x, y, 'o', ms=18, mfc='none', mec=sw, mew=1 )
 
         #plt.show()
-        image_file_path = f'tmp/model_scores_plot_{case_no}.png'
+        image_file_path = os.path.join( "tmp", f'model_scores_plot_{case_no}.png' )
         plt.savefig(image_file_path)
 
 if __name__ == "__main__":
-    main3()
+    main()

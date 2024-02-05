@@ -72,9 +72,9 @@ def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, tim
     if reqest_list:
 
         if dimensions:
-            res = client.embeddings.create( input=input_list, model=model, dimensions=dimensions, timeout=timeout )
+            res = client.embeddings.create( input=reqest_list, model=model, dimensions=dimensions, timeout=timeout )
         else:
-            res = client.embeddings.create( input=input_list, model=model, timeout=timeout )
+            res = client.embeddings.create( input=reqest_list, model=model, timeout=timeout )
         tokens:int = res.usage.total_tokens
         for ee in res.data:
             idx = index_convert[ee.index]
