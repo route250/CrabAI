@@ -88,11 +88,13 @@ def create_embeddings( client:OpenAI, input, model:str, dimensions:int=None, tim
 
 class EmbeddingFunction:
 
-    def __init__( self, client:OpenAI, model:str, dimensions:int=None, timeout:float=None ):
+    def __init__( self, client:OpenAI, model:str, dimensions:int=None, timeout:float=None, cachedir=None ):
         self.client:OpenAI = client
         self.model:str = model
         self.dimensions:int = dimensions
         self.timeout:float = timeout
+        self.cachedir = cachedir
+        self.tokens:int = 0
 
     def __str__(self) ->str:
         if self.dimensions:
@@ -105,7 +107,9 @@ class EmbeddingFunction:
 
     def __call__( self, input, timeout:float=None ):
         tm:float = timeout if timeout else self.timeout
-        return create_embeddings( self.client, input=input, model=self.model, dimensions=self.dimensions, timeout=tm )
+        emb,tokens = create_embeddings( self.client, input=input, model=self.model, dimensions=self.dimensions, timeout=tm, cachedir=self.cachedir )
+        self.tokens += tokens
+        return emb
 
 def cosine_similarity(A, B):
     """

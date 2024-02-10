@@ -58,6 +58,8 @@ fn_3large_1536 = EmbeddingFunc(client,"text-embedding-3-large",1536, color='toma
 fn_3large_256 = EmbeddingFunc(client,"text-embedding-3-large",256, color='brown')
 fn_ada002 = EmbeddingFunc(client,"text-embedding-ada-002", color='green')
 
+emb_models:list[EmbeddingFunc] = [fn_3small, fn_3small_256, fn_3large, fn_3large_1536, fn_3large_256, fn_ada002]
+
 class CrabSimFunc:
     def __str__(self)-> str:
         return "crab cosine_similarity"
@@ -92,6 +94,16 @@ Query_list = [
     {'query': '橋が流されたのは何故ですか？', 'segment':5 },
 ]
 
+txt_64_73:str = """メロスも、満面に喜色を湛《たた》え、しばらくは、王とのあの約束をさえ忘れていた。祝宴は、夜に入っていよいよ乱れ華やかになり、人々は、外の豪雨を全く気にしなくなった。メロスは、一生このままここにいたい、と思った。この佳い人たちと生涯暮して行きたいと願ったが、いまは、自分のからだで、自分のものでは無い。ままならぬ事である。メロスは、わが身に鞭打ち、ついに出発を決意した。あすの日没までには、まだ十分の時が在る。ちょっと一眠りして、それからすぐに出発しよう、と考えた。その頃には、雨も小降りになっていよう。少しでも永くこの家に愚図愚図とどまっていたかった。メロスほどの男にも、やはり未練の情というものは在る。今宵呆然、歓喜に酔っているらしい花嫁に近寄り、
+「おめでとう。私は疲れてしまったから、ちょっとご免こうむって眠りたい。眼が覚めたら、すぐに市に出かける。大切な用事があるのだ。私がいなくても、もうおまえには優しい亭主があるのだから、決して寂しい事は無い。おまえの兄の、一ばんきらいなものは、人を疑う事と、それから、嘘をつく事だ。おまえも、それは、知っているね。亭主との間に、どんな秘密でも作ってはならぬ。おまえに言いたいのは、それだけだ。おまえの兄は、たぶん偉い男なのだから、おまえもその誇りを持っていろ。」
+"""
+txt_66_71:str = """メロスは、一生このままここにいたい、と思った。この佳い人たちと生涯暮して行きたいと願ったが、いまは、自分のからだで、自分のものでは無い。ままならぬ事である。メロスは、わが身に鞭打ち、ついに出発を決意した。あすの日没までには、まだ十分の時が在る。ちょっと一眠りして、それからすぐに出発しよう、と考えた。その頃には、雨も小降りになっていよう。少しでも永くこの家に愚図愚図とどまっていたかった。メロスほどの男にも、やはり未練の情というものは在る。今宵呆然、歓喜に酔っているらしい花嫁に近寄り、「おめでとう。私は疲れてしまったから、ちょっとご免こうむって眠りたい。眼が覚めたら、すぐに市に出かける。"""
+
+txt_68_69:str = """ちょっと一眠りして、それからすぐに出発しよう、と考えた。その頃には、雨も小降りになっていよう。少しでも永くこの家に愚図愚図とどまっていたかった。メロスほどの男にも、やはり未練の情というものは在る。"""
+txt01_nomal:str = """メロスも、顔いっぱいに喜びをあふれさせて、しばらくは王との約束をすっかり忘れていました。祝宴は夜になるとさらに賑やかになり、人々は外の激しい雨にも全く気を留めなくなりました。メロスは、一生このままここにいたいと思いました。この素晴らしい人たちと一生を共に過ごしたいと願ったけれど、今は自分の体が自分のものではありません。どうすることもできません。メロスは自分を奮い立たせ、ついに出発する決意をしました。明日の日没までには、まだたくさん時間があります。少し眠ってから、すぐに出発しようと思いました。その頃には、雨も小降りになっているでしょう。できるだけ長くこの家にいたかったです。メロスも、やはり未練があるのです。今宵、喜びに酔いしれている花嫁に近づき、
+「おめでとう。私は疲れてしまったから、少し休ませてもらって眠りたい。目が覚めたら、すぐに町へ出かける。大切な用があるんだ。私がいなくても、あなたには優しい夫がいるから、寂しくなんかないよ。あなたの兄が一番嫌うのは、人を疑うことと、嘘をつくことだ。あなたもそれは知ってるよね。夫との間に、どんな秘密も作ってはいけない。言いたいのは、それだけだ。あなたの兄は、きっと素晴らしい人なんだから、あなたもその誇りを持ってね。」
+花嫁は、夢見るようにうなずいた。メロスは、それから花婿の肩を叩いて、
+「持ち物がないのはお互い様だ。私の家には、宝物と言ったら、妹と羊だけだよ。他には何もない。全部あげる。もう一つ、メロスの弟になったことを誇りに思ってね。」"""
 test_case_list = [
     #セリヌンティウスは、すべてを察した様子で首肯《うなず》き、刑場一ぱいに鳴り響くほど音高くメロスの右頬を殴った
     { 
@@ -162,6 +174,51 @@ test_case_list = [
             { 'text': '焼き芋を食べたのは誰ですか？', 'segments': [] },
         ]
     },
+    {
+        'tokens': 1024,
+        'models': [fn_3small,fn_3large,fn_ada002],
+        'query': [
+            { 'text': '羊小屋にもぐり込んで、死んだように深く眠った。眼が覚めたのは翌る日の薄明の頃である。メロスは跳ね起き、南無三、寝過したか、いや、まだまだ大丈夫、これからすぐに出発すれば、約束の刻限までには十分間に合う。きょうは是非とも、あの王に、人の信実の存するところを見せてやろう。そうして笑って磔の台に上ってやる。メロスは、悠々と身仕度をはじめた。', 'segments':[76,77,78,79]},
+            { 'text': 'メロスはどこで寝たの？', 'segments':[76,77]},
+            { 'text': 'メロスは何時に起きたの？', 'segments':[77]},
+        ]
+    },
+    {
+        'tokens': 512,
+        'models': [fn_3small,fn_3large,fn_ada002],
+        'query': [
+            { 'text': '羊小屋にもぐり込んで、死んだように深く眠った。眼が覚めたのは翌る日の薄明の頃である。メロスは跳ね起き、南無三、寝過したか、いや、まだまだ大丈夫、これからすぐに出発すれば、約束の刻限までには十分間に合う。きょうは是非とも、あの王に、人の信実の存するところを見せてやろう。そうして笑って磔の台に上ってやる。メロスは、悠々と身仕度をはじめた。', 'segments':[76,77,78,79]},
+            { 'text': 'メロスはどこで寝たの？', 'segments':[76,77]},
+            { 'text': 'メロスは何時に起きたの？', 'segments':[77]},
+        ]
+    },
+    {
+        'tokens': 256,
+        'models': [fn_3small,fn_3large,fn_ada002],
+        'query': [
+            { 'text': '羊小屋にもぐり込んで、死んだように深く眠った。眼が覚めたのは翌る日の薄明の頃である。メロスは跳ね起き、南無三、寝過したか、いや、まだまだ大丈夫、これからすぐに出発すれば、約束の刻限までには十分間に合う。きょうは是非とも、あの王に、人の信実の存するところを見せてやろう。そうして笑って磔の台に上ってやる。メロスは、悠々と身仕度をはじめた。', 'segments':[76,77,78,79]},
+            { 'text': 'メロスはどこで寝たの？', 'segments':[76,77]},
+            { 'text': 'メロスは何時に起きたの？', 'segments':[77]},
+        ]
+    },
+    {
+        'tokens': 64,
+        'models': [fn_3small,fn_3large,fn_ada002],
+        'query': [
+            { 'text': '羊小屋にもぐり込んで、死んだように深く眠った。眼が覚めたのは翌る日の薄明の頃である。メロスは跳ね起き、南無三、寝過したか、いや、まだまだ大丈夫、これからすぐに出発すれば、約束の刻限までには十分間に合う。きょうは是非とも、あの王に、人の信実の存するところを見せてやろう。そうして笑って磔の台に上ってやる。メロスは、悠々と身仕度をはじめた。', 'segments':[76,77,78,79]},
+            { 'text': 'メロスはどこで寝たの？', 'segments':[76,77]},
+            { 'text': 'メロスは何時に起きたの？', 'segments':[77]},
+        ]
+    },
+    {
+        'tokens': 1024,
+        'models': [fn_3small,fn_3large,fn_ada002],
+        'query': [
+            { 'text': txt_64_73, 'segments':[64,65,66,67,68,69,70,71,72,73]},
+            { 'text': txt_66_71, 'segments':[66,67,68,69,70,71]},
+            { 'text': txt_68_69, 'segments':[68,69]},
+        ]
+    },
     # segment 6
     #山賊たちは、ものも言わず一斉に棍棒《こんぼう》を振り挙げた。メロスはひょいと、からだを折り曲げ、飛鳥の如く身近かの一人に襲いかかり、その棍棒を奪い取って、
     #「気の毒だが正義のためだ！」と猛然一撃、たちまち、三人を殴り倒し、残る者のひるむ隙《すき》に、さっさと走って峠を下った。
@@ -190,16 +247,30 @@ def get_marker( index:int ) :
 def get_marker_title( index:int ) :
     return line_marker_list[ index%len(line_marker_list) ].get('title','x')
 
+def text_trim( text:str, maxlen:int=70 ) ->str:
+    text=text.replace('\n','').strip()
+    ll = len(text)
+    if ll<=maxlen:
+        return text
+    midstr=f' ...(省略)... '
+    a = (maxlen-len(midstr))//2
+    b = maxlen-len(midstr)-a
+    return text[:a]+midstr+text[-b:]
+
 def main():
 
+    dpi:int = 126
+    width_in: int = 16
+    height_in:int = 9
     # テキストをロード
     with open( input_text_file, 'r', encoding='cp932') as file:
         text_data = file.read()
     # 分割キャッシュ
     split_cache = {}
     case_no:int = 0
+    total_tks:int = 0
     for test_case in test_case_list:
-
+        tks = sum( fn.tokens for fn in emb_models )
         test_case_query_list = test_case.get('query') or []
         test_case_model_list = test_case.get('models') or []
         if not test_case_model_list or not test_case_query_list:
@@ -213,9 +284,9 @@ def main():
             basename_without_ext = os.path.splitext(os.path.basename(input_text_file))[0]
             segments_dump_file = os.path.join( "tmp", f"{basename_without_ext}_split_{split_tokens}.txt" )
             with open(segments_dump_file, 'w', encoding='utf-8' ) as out:
-                for i,txt in enumerate( segment_text_list or [] ):
+                for i,query_text in enumerate( segment_text_list or [] ):
                     out.write(f"# Segment {i}\n")
-                    out.write(txt)
+                    out.write(query_text)
                     out.write("\n\n")
 
         xticks = [ s for s in range(0,len(segment_text_list))]
@@ -230,37 +301,42 @@ def main():
 
             is_not_distance = fn_sim != squared_l2_distance
 
-            plt.figure(figsize=(17, 9))
-            plt.suptitle( f' Case{case_no} {ylabel}の比較 分割サイズ:{split_tokens}')
+            plt.figure(figsize=(width_in, height_in),dpi=dpi)
+            plt.suptitle( f' Case{case_no} {ylabel}の比較')
             plt.xlabel('Segment')
             plt.xticks( xticks )
             plt.ylabel( ylabel )
             plt.grid(True)
 
-            xpos2 = len(segment_text_list)*-0.05
+            xpos2 = len(segment_text_list)*-0.03
             ybase = 1.01 if is_not_distance else -0.02
             yheight = 0.03 if is_not_distance else -0.06
             for qidx,query in enumerate(test_case_query_list):
                 ypos = ybase + yheight*( len(test_case_query_list)-qidx-1)
-                plt.text( xpos2,ypos, f"{get_marker_title(qidx)}:{ text_filter(query.get('text'))}", fontsize=12 )
+                query_text = text_trim( text_filter(query.get('text')))
+                plt.text( xpos2,ypos, f"{get_marker_title(qidx)}:{query_text}", fontsize=12 )
 
             xpos2 = len(segment_text_list)*0.8
             for midx,mm in enumerate( test_case_model_list ):
                 ypos = ybase + yheight*( len(test_case_model_list)-midx-1)
-                plt.text( xpos2, ypos, f'{str(mm)}:{mm.color}', color=mm.color, fontsize=12)
+                plt.text( xpos2, ypos, f'{str(mm)}', color=mm.color, fontsize=12)
+            ypos = ybase + yheight*( len(test_case_model_list)-(-1)-1)
+            plt.text( xpos2, ypos, f"分割サイズ:{split_tokens}", fontsize=12)
 
             segments = [ (x*64)//split_tokens for query in test_case_query_list for x in query.get('segments', [])]
             segments = sorted(set(segments))
             for x in segments:
                 plt.axvline( x=x, color='r' )
         
+            ms = 6 if len(segment_text_list)<40 else 3
+
             global_min = None
             global_max = None
             for fn in test_case_model_list:
-                segment_emb_list, tokens = fn( text_filter(segment_text_list) )
+                segment_emb_list = fn( text_filter(segment_text_list) )
                 for q,query in enumerate(test_case_query_list):
-                    txt = text_filter( query.get('text','') )
-                    query_emb, tokens = fn( txt )
+                    query_text = text_filter( query.get('text','') )
+                    query_emb = fn( query_text )
                     sim_list = [ fn_sim(query_emb, seg_emb ) for seg_emb in segment_emb_list ]
                     ymin = min(sim_list)
                     global_min = ymin if global_min is None or ymin<global_min else global_min
@@ -268,8 +344,8 @@ def main():
                     global_max = ymax if global_max is None or ymax>global_max else global_max
                     cl = fn.color if query.get('segments') else fn.color2
                     tt = '-' if query.get('segments') else '--'
-                    lw = 1 #if query.get('segments') else 0.5
-                    plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=cl, linestyle=tt, marker=get_marker(q),  linewidth=lw )
+                    lw = 0.5 #if query.get('segments') else 0.5
+                    plt.plot(xticks,sim_list, label=f"Q:{q} {fn.simple_name()}", color=cl, linestyle=tt, marker=get_marker(q),  markersize=ms, linewidth=lw )
                     mark_y = ymax if fn_sim != squared_l2_distance else ymin
                     mark_x = sim_list.index(mark_y)
                     sw = fn.color if query.get('segments') else 'gray'
@@ -278,9 +354,17 @@ def main():
                 plt.ylim(0, 1) 
             else:
                 plt.ylim( int(global_max+1),0)
+            plt.subplots_adjust( left=0.05, right=0.95 )
+            #plt.tight_layout()  # 自動的に空白を最適化
             #plt.show()
-            image_file_path = os.path.join( "tmp", f'embedding_scores_plot_{case_no}_{ylabel}.png' )
-            plt.savefig(image_file_path)
+            for ext in ['png','svg']:
+                image_file_path = os.path.join( "tmp", ext, f'embedding_scores_plot_{case_no}_{ylabel}.{ext}' )
+                os.makedirs( os.path.dirname(image_file_path),exist_ok=True)
+                plt.savefig(image_file_path)
+
+            tks = sum( fn.tokens for fn in emb_models ) - tks
+            total_tks += tks
+            print( f"    tokens: {tks} {total_tks}")
 
 if __name__ == "__main__":
     main()
